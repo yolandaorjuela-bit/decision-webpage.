@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Under Uncertainty – C10</title>
+<style>
+:root{--bg:#fdeef4;--card:#fff;--ink:#2d1b3d;--mut:#7a6788;--pur:#9d63d8;--pur2:#8446c4;--pink:#ec6fa5;--lil:#f3e8fc;--line:#e6d3ee;--red:#c62828;--redbg:#ffe3e3;--warn:#fff3d6;--ok:#e3f6e8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Trebuchet MS",system-ui,sans-serif}
+header{background:linear-gradient(120deg,var(--pink),var(--pur));color:#fff;padding:22px 16px}
+header h1{margin:0;font-size:1.6rem;text-shadow:0 1px 2px rgba(80,20,100,.35)}header p{margin:4px 0 0;opacity:.9}
+main{max-width:1100px;margin:0 auto;padding:16px}
+section{background:var(--card);border:1px solid var(--line);border-top:4px solid var(--pink);border-radius:14px;padding:16px;margin-bottom:16px}
+h2{margin:0 0 10px;font-size:1.2rem;color:var(--pur2)}h3{margin:14px 0 6px;font-size:1rem;color:var(--pur2)}
+.scroll{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:center;white-space:nowrap}
+th{background:var(--lil)}td.l,th.l{text-align:left}
+input[type=text]{width:100%;min-width:80px;padding:6px;border:1px solid var(--line);border-radius:8px;font:inherit;text-align:center;background:#fffafd}
+input.bad{border-color:var(--red);background:var(--redbg)}
+input:focus,button:focus,select:focus{outline:2px solid var(--pur);outline-offset:1px}
+button,select{font:inherit;border-radius:8px;border:1px solid var(--pur);padding:6px 12px;cursor:pointer}
+button{background:var(--pur);color:#fff}button:hover{background:var(--pur2)}
+button.sec{background:#fff;color:var(--pur)}button.sec:hover{background:var(--lil)}
+button.x{padding:2px 8px;background:#fff;color:var(--pink);border-color:var(--pink)}button.x:hover{background:#ffe3ef}
+button:disabled{opacity:.4;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.msg{padding:8px 12px;border-radius:8px;margin:6px 0;border-left:5px solid}
+.msg.err{background:var(--redbg);border-color:var(--red)}.msg.warn{background:var(--warn);border-color:#e0a100}.msg.info{background:var(--lil);border-color:var(--pur)}
+.best{background:var(--lil);color:var(--pur2);font-weight:700}
+.rec{background:var(--ok);border-radius:8px;padding:6px 10px;margin:4px 0}
+.stages{list-style:none;padding:0;margin:0}
+.stages li{display:flex;gap:8px;align-items:center;background:var(--lil);border-radius:8px;padding:6px 10px;margin:6px 0}
+.stages .nm{flex:1}
+.flow{display:flex;flex-direction:column;align-items:center;gap:0}
+.box{width:100%;max-width:640px;border:2px solid var(--pink);border-radius:12px;padding:10px 12px;background:#fff}
+.box.start{background:var(--lil)}.box.final{background:linear-gradient(120deg,var(--pink),var(--pur));color:#fff;border-color:var(--pur)}.box.skip{border-style:dashed;border-color:var(--line);color:var(--mut)}
+.arrow{font-size:1.4rem;color:var(--pink);line-height:1.2}
+.chip{display:inline-block;padding:2px 10px;border-radius:99px;margin:2px;font-size:.9rem}
+.chip.k{background:var(--pur);color:#fff}.chip.e{background:#eee;color:#888;text-decoration:line-through}
+.box.final .chip.k{background:#fff;color:var(--pur2)}.chip.k{background:var(--pink)}.chip.k:nth-child(even){background:var(--pur)}
+.lbl{font-size:.85rem;color:var(--mut);margin-right:4px}
+footer{text-align:center;padding:12px 16px 28px}footer a{color:var(--pur2);font-weight:700}
+</style>
+</head>
+<body>
+<header><h1>Decision Under Uncertainty</h1><p>Enter payoffs, compare four criteria, and follow the staged filtering step by step.</p></header>
+<main>
+<section>
+  <h2>1. Decision problem</h2>
+  <div class="bar">
+    <label for="ex">Preloaded example:</label>
+    <select id="ex"><option value="0">Example 1 – Investment portfolio</option><option value="1">Example 2 – Product launch</option></select>
+    <button id="addA">+ Alternative</button><button id="addS">+ State of nature</button>
+  </div>
+  <div class="scroll"><table id="tbl"></table></div>
+  <div id="msgs"></div>
+</section>
+<section>
+  <h2>2. Criteria comparison</h2>
+  <div id="res"></div>
+</section>
+<section>
+  <h2>3. Staged filtering</h2>
+  <p>Each active stage keeps only the best alternatives among the survivors; ties advance together. Regret and EMV always use the full payoff table. Use the arrows to reorder and the checkboxes to turn stages on or off.</p>
+  <ul class="stages" id="stg"></ul>
+  <h3>Flow diagram</h3>
+  <div class="flow" id="flow"></div>
+</section>
+</main>
+<footer><a id="ai" target="_blank" rel="noopener">AI conversation used to develop this webpage</a></footer>
+<script>
+const AI_LINK = "https://claude.ai/share/4cb34ea6-25c7-48f4-90b6-4abaac7162c2";
+document.getElementById("ai").href = AI_LINK;
+
+const EXAMPLES = [
+ {alts:["Stocks","Crypto","Real estate","Bonds"],sts:[["Recession",0.3],["Stable",0.4],["Boom",0.3]],
+  pay:[[-20,10,50],[-40,0,50],[-5,12,30],[5,8,15]]},
+ {alts:["P1","P2","P3","P4"],sts:[["Low demand",0.2],["Medium demand",0.5],["High demand",0.3]],
+  pay:[[40,60,100],[50,60,70],[40,70,100],[20,40,80]]}
+];
+const NAMES={maximax:"Maximax",maximin:"Maximin",regret:"Minimax Regret",emv:"EMV / Bayes"};
+const EPS=1e-9;
+let S, stages=[{k:"maximax",on:true},{k:"maximin",on:true},{k:"regret",on:true},{k:"emv",on:true}];
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=x=>Number.isFinite(x)?String(Math.round(x*10000)/10000):"–";
+const num=s=>{s=String(s).trim();if(s==="")return NaN;const v=Number(s);return Number.isFinite(v)?v:NaN};
+
+function load(i){
+  const e=EXAMPLES[i];
+  S={alts:[...e.alts],sts:e.sts.map(s=>({n:s[0],p:String(s[1])})),pay:e.pay.map(r=>r.map(String))};
+  renderTable();update();
+}
+
+function renderTable(){
+  let h='<thead><tr><th class="l">Alternative</th>';
+  S.sts.forEach((s,j)=>h+=`<th><input type="text" data-k="sn" data-j="${j}" value="${esc(s.n)}" aria-label="State name ${j+1}"><br><button class="x" data-rs="${j}" ${S.sts.length<2?"disabled":""} title="Remove state">×</button></th>`);
+  h+='<th></th></tr><tr><th class="l">Probability</th>';
+  S.sts.forEach((s,j)=>h+=`<th><input type="text" inputmode="decimal" data-k="p" data-j="${j}" value="${esc(s.p)}" aria-label="Probability of state ${j+1}"></th>`);
+  h+='<th id="psum"></th></tr></thead><tbody>';
+  S.alts.forEach((a,i)=>{
+    h+=`<tr><td class="l"><input type="text" data-k="an" data-i="${i}" value="${esc(a)}" aria-label="Alternative name ${i+1}"></td>`;
+    S.sts.forEach((s,j)=>h+=`<td><input type="text" inputmode="decimal" data-k="v" data-i="${i}" data-j="${j}" value="${esc(S.pay[i][j])}" aria-label="Payoff ${i+1},${j+1}"></td>`);
+    h+=`<td><button class="x" data-ra="${i}" ${S.alts.length<2?"disabled":""} title="Remove alternative">×</button></td></tr>`;
+  });
+  $("tbl").innerHTML=h+'</tbody>';
+}
+
+$("tbl").addEventListener("input",e=>{
+  const d=e.target.dataset;if(!d.k)return;
+  if(d.k==="sn")S.sts[+d.j].n=e.target.value;
+  else if(d.k==="p")S.sts[+d.j].p=e.target.value;
+  else if(d.k==="an")S.alts[+d.i]=e.target.value;
+  else S.pay[+d.i][+d.j]=e.target.value;
+  update();
+});
+$("tbl").addEventListener("click",e=>{
+  const d=e.target.dataset;
+  if(d.ra!==undefined){S.alts.splice(+d.ra,1);S.pay.splice(+d.ra,1)}
+  else if(d.rs!==undefined){S.sts.splice(+d.rs,1);S.pay.forEach(r=>r.splice(+d.rs,1))}
+  else return;
+  renderTable();update();
+});
+$("addA").onclick=()=>{S.alts.push("Alternative "+(S.alts.length+1));S.pay.push(S.sts.map(()=>"0"));renderTable();update()};
+$("addS").onclick=()=>{S.sts.push({n:"State "+(S.sts.length+1),p:"0"});S.pay.forEach(r=>r.push("0"));renderTable();update()};
+$("ex").onchange=e=>load(+e.target.value);
+
+function best(vals,dir,set){
+  const v=set.map(i=>vals[i]);
+  const t=dir==="max"?Math.max(...v):Math.min(...v);
+  return set.filter(i=>Math.abs(vals[i]-t)<=EPS);
+}
+const names=idx=>idx.map(i=>S.alts[i].trim()||`(unnamed #${i+1})`);
+
+function compute(){
+  const n=S.alts.length,m=S.sts.length,msgs=[];
+  // validate payoffs
+  const P=S.pay.map(r=>r.map(num));
+  let badPay=false;
+  document.querySelectorAll('[data-k="v"]').forEach(el=>{
+    const ok=!Number.isNaN(P[+el.dataset.i][+el.dataset.j]);el.classList.toggle("bad",!ok);if(!ok)badPay=true;
+  });
+  if(badPay)msgs.push(["err","Some payoffs are empty or not numbers (marked in red). Enter numeric values to see results."]);
+  // validate probabilities
+  const pr=S.sts.map(s=>num(s.p));let badP=false;
+  document.querySelectorAll('[data-k="p"]').forEach(el=>{
+    const v=pr[+el.dataset.j];const ok=!Number.isNaN(v)&&v>=0;el.classList.toggle("bad",!ok);if(!ok)badP=true;
+  });
+  let sum=NaN,probOK=false;
+  if(badP)msgs.push(["err","Each probability must be a number that is zero or greater (marked in red). EMV is skipped."]);
+  else{
+    sum=pr.reduce((a,b)=>a+b,0);
+    if(Math.abs(sum-1)>1e-6)msgs.push(["warn","Probabilities add up to "+fmt(sum)+", not 1. EMV is skipped until they sum to 1.",true]);
+    else probOK=true;
+  }
+  const ps=$("psum");if(ps)ps.textContent="Sum = "+fmt(sum);
+  // names
+  const trimmed=S.alts.map(a=>a.trim());
+  if(trimmed.some(a=>a===""))msgs.push(["warn","One or more alternatives have an empty name."]);
+  const dup=trimmed.filter((a,i)=>a&&trimmed.indexOf(a)!==i);
+  if(dup.length)msgs.push(["warn","Duplicated alternative names: "+[...new Set(dup)].join(", ")+"."]);
+  const sn=S.sts.map(s=>s.n.trim());
+  if(sn.some(a=>a===""))msgs.push(["warn","One or more states of nature have an empty name."]);
+  if(new Set(sn).size<sn.length)msgs.push(["warn","Some states of nature share the same name."]);
+  return {n,m,P,badPay,pr,probOK,msgs};
+}
+
+function update(){
+  const c=compute();
+  $("msgs").innerHTML=c.msgs.map(m=>`<div class="msg ${m[0]}">${esc(m[1])}${m[2]?' <button class="sec" id="norm">Normalize probabilities</button>':""}</div>`).join("");
+  const nb=$("norm");if(nb)nb.onclick=()=>{
+    const tot=c.pr.reduce((a,b)=>a+b,0);
+    S.sts.forEach((s,j)=>s.p=String(tot>0?Math.round(c.pr[j]/tot*1e6)/1e6:Math.round(1e6/c.m)/1e6));
+    renderTable();update();
+  };
+  renderStageList();
+  if(c.badPay){$("res").innerHTML='<div class="msg err">Fix the highlighted payoffs to calculate.</div>';$("flow").innerHTML='<div class="msg err">No flow diagram until payoffs are valid.</div>';return}
+  const {n,m,P}=c, all=[...Array(n).keys()];
+  const vals={
+    maximax:P.map(r=>Math.max(...r)),
+    maximin:P.map(r=>Math.min(...r))
+  };
+  const colMax=S.sts.map((_,j)=>Math.max(...P.map(r=>r[j])));
+  const R=P.map(r=>r.map((v,j)=>colMax[j]-v));
+  vals.regret=R.map(r=>Math.max(...r));
+  vals.emv=c.probOK?P.map(r=>r.reduce((a,v,j)=>a+v*c.pr[j],0)):null;
+  const dirs={maximax:"max",maximin:"max",regret:"min",emv:"max"};
+  const win={};
+  for(const k in vals)win[k]=vals[k]?best(vals[k],dirs[k],all):null;
+  // table
+  let h='<div class="scroll"><table><thead><tr><th class="l">Alternative</th><th>Maximax<br>(best of row max)</th><th>Maximin<br>(best of row min)</th><th>Minimax Regret<br>(max regret)</th><th>EMV / Bayes</th></tr></thead><tbody>';
+  all.forEach(i=>{
+    h+=`<tr><td class="l">${esc(names([i])[0])}</td>`;
+    for(const k in vals){
+      if(!vals[k]){h+='<td>skipped</td>';continue}
+      h+=`<td class="${win[k].includes(i)?"best":""}">${fmt(vals[k][i])}</td>`;
+    }
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  for(const k in vals){
+    if(!win[k]){h+=`<div class="msg warn"><b>${NAMES[k]}:</b> skipped because the probabilities are not valid.</div>`;continue}
+    const w=names(win[k]);
+    h+=`<div class="rec"><b>${NAMES[k]}:</b> ${w.length>1?"TIE between "+esc(w.join(" and ")):"recommends "+esc(w[0])} (${dirs[k]==="max"?"highest":"lowest"} value ${fmt(vals[k][win[k][0]])})</div>`;
+  }
+  h+='<h3>Regret matrix (best payoff in the state minus the payoff)</h3><div class="scroll"><table><thead><tr><th class="l">Alternative</th>';
+  S.sts.forEach(s=>h+=`<th>${esc(s.n||"(unnamed)")}</th>`);
+  h+='<th>Max regret</th></tr></thead><tbody>';
+  all.forEach(i=>{
+    h+=`<tr><td class="l">${esc(names([i])[0])}</td>`+R[i].map(v=>`<td>${fmt(v)}</td>`).join("")+`<td class="${win.regret.includes(i)?"best":""}">${fmt(vals.regret[i])}</td></tr>`;
+  });
+  $("res").innerHTML=h+'</tbody></table></div>';
+  // staged filtering + flow
+  let surv=[...all],f=`<div class="box start"><b>Start</b><br>${surv.map(i=>`<span class="chip k">${esc(names([i])[0])}</span>`).join("")}</div>`;
+  let ran=0;
+  stages.forEach(st=>{
+    if(!st.on)return;
+    f+='<div class="arrow">↓</div>';
+    if(!vals[st.k]){f+=`<div class="box skip"><b>${NAMES[st.k]}</b> – skipped (invalid probabilities). Nobody is eliminated.</div>`;return}
+    ran++;
+    const keep=best(vals[st.k],dirs[st.k],surv),out=surv.filter(i=>!keep.includes(i));
+    f+=`<div class="box"><b>Stage ${ran}: ${NAMES[st.k]}</b> <span class="lbl">(${dirs[st.k]==="max"?"keep highest":"keep lowest"})</span><br>
+      <span class="lbl">Kept${keep.length>1?" (tie)":""}:</span>${keep.map(i=>`<span class="chip k">${esc(names([i])[0])} (${fmt(vals[st.k][i])})</span>`).join("")}<br>
+      <span class="lbl">Eliminated:</span>${out.length?out.map(i=>`<span class="chip e">${esc(names([i])[0])} (${fmt(vals[st.k][i])})</span>`).join(""):"<i>none</i>"}</div>`;
+    surv=keep;
+  });
+  f+=`<div class="arrow">↓</div><div class="box final"><b>Final result</b><br>${ran===0?"No active stages – all alternatives remain: ":surv.length>1?"Tie – several alternatives remain: ":"Recommended alternative: "}${surv.map(i=>`<span class="chip k">${esc(names([i])[0])}</span>`).join("")}</div>`;
+  $("flow").innerHTML=f;
+}
+
+function renderStageList(){
+  $("stg").innerHTML=stages.map((s,i)=>`<li><input type="checkbox" data-t="${i}" ${s.on?"checked":""} id="st${i}" aria-label="Enable ${NAMES[s.k]}"><label class="nm" for="st${i}">${i+1}. ${NAMES[s.k]}</label>
+    <button class="sec" data-u="${i}" ${i===0?"disabled":""} aria-label="Move up">↑</button><button class="sec" data-d="${i}" ${i===stages.length-1?"disabled":""} aria-label="Move down">↓</button></li>`).join("");
+}
+$("stg").addEventListener("click",e=>{
+  const d=e.target.dataset,sw=(a,b)=>{[stages[a],stages[b]]=[stages[b],stages[a]];update()};
+  if(d.u!==undefined)sw(+d.u,+d.u-1);else if(d.d!==undefined)sw(+d.d,+d.d+1);
+});
+$("stg").addEventListener("change",e=>{
+  if(e.target.dataset.t!==undefined){stages[+e.target.dataset.t].on=e.target.checked;update()}
+});
+load(0);
+</script>
+</body>
+</html>
